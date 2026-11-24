@@ -12,3 +12,5 @@
 - [SG-UPG-001: Unprotected Contract Upgrade](rules/upgrade.md)
 - [SG-TTL-001: Missing TTL Extension](rules/ttl.md)
 - [SG-MINT-001: Unbounded Minting Routine](rules/mint.md)
+- [SG-AUTH-002: Cross-Contract Auth Propagation](rules/auth_prop.md)
+- [SG-DATA-001: Unbounded State Growth](rules/unbounded_data.md)

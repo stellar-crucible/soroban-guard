@@ -56,6 +56,7 @@ enum OutputFormat {
     Text,
     Markdown,
     Sarif,
+    Html,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -120,6 +121,11 @@ fn main() -> Result<()> {
                 }
                 OutputFormat::Sarif => {
                     println!("{}", serde_json::to_string_pretty(&reports)?);
+                }
+                OutputFormat::Html => {
+                    for report in &reports {
+                        println!("{}", report.render_html());
+                    }
                 }
                 OutputFormat::Text => {
                     println!("{}", format!("Audited {} file(s)...", reports.len()).bold());

@@ -4,10 +4,12 @@ use std::fmt;
 
 pub mod arithmetic;
 pub mod auth;
+pub mod auth_prop;
 pub mod mint;
 pub mod reentrancy;
 pub mod storage;
 pub mod ttl;
+pub mod unbounded_data;
 pub mod upgrade;
 
 /// Unique identifier for an audit rule.
@@ -81,6 +83,8 @@ impl RuleRegistry {
         registry.register(upgrade::UnprotectedUpgradeRule);
         registry.register(ttl::MissingTtlExtensionRule);
         registry.register(mint::UnboundedMintRule);
+        registry.register(auth_prop::AuthPropagationRule);
+        registry.register(unbounded_data::UnboundedDataGrowthRule);
         registry
     }
 }
