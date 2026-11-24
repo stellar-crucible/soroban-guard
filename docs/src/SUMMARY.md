@@ -1,0 +1,12 @@
+# Summary
+
+[Introduction](index.md)
+[Getting Started](getting-started.md)
+[Integration with soroban-testkit](integration-with-testkit.md)
+
+# Security Rules
+- [SG-AUTH-001: Missing Authentication](rules/auth.md)
+- [SG-STOR-001: Temporary Storage Hazard](rules/storage.md)
+- [SG-REENT-001: State Mutation After Call](rules/reentrancy.md)
+- [SG-ARITH-001: Division Precision Loss](rules/arithmetic.md)
+- [SG-UPG-001: Unprotected Contract Upgrade](rules/upgrade.md)

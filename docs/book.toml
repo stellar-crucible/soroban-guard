@@ -1,0 +1,12 @@
+[book]
+authors = ["Stellar Crucible Team"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Soroban Guard Documentation"
+
+[output.html]
+git-repository-url = "https://github.com/stellar-crucible/soroban-guard"
+edit-url-template = "https://github.com/stellar-crucible/soroban-guard/edit/main/docs/{path}"
+site-url = "/soroban-guard/"
+cname = ""
