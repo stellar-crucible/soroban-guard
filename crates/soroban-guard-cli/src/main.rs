@@ -52,6 +52,14 @@ enum Commands {
         /// Output test file destination
         #[arg(short, long, default_value = "tests/generated_invariants.rs")]
         output: PathBuf,
+
+        /// Generate proptest fuzzing blocks with soroban-testkit-generators
+        #[arg(long)]
+        proptest: bool,
+
+        /// Number of generative proptest cases
+        #[arg(long, default_value_t = 500)]
+        cases: u32,
     },
 }
 
@@ -243,7 +251,12 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::SynthTestkit { path, output } => {
+        Commands::SynthTestkit {
+            path,
+            output,
+            proptest,
+            cases,
+        } => {
             let auditor = SorobanAuditor::default();
             let reports = auditor.audit_path(&path)?;
 
@@ -252,19 +265,44 @@ fn main() -> Result<()> {
             tests.push_str("//! Regression testkit invariant harness.\n\n");
             tests.push_str("#![cfg(test)]\n\n");
 
+            if proptest {
+                tests.push_str("use proptest::prelude::*;\n");
+                tests.push_str("use soroban_sdk::{Address, Env};\n");
+                tests.push_str(
+                    "use soroban_testkit_generators::{arb_address, arb_i128, arb_symbol};\n\n",
+                );
+                tests.push_str(&format!(
+                    "proptest! {{\n    #![proptest_config(ProptestConfig::with_cases({}))]\n\n",
+                    cases
+                ));
+            }
+
             let mut count = 0;
             for report in &reports {
                 for finding in &report.findings {
                     if let Some(invariant) = &finding.remediation.testkit_invariant {
                         count += 1;
-                        tests.push_str(&format!(
-                            "// [{}] Target: {}\n",
-                            finding.rule_id, finding.target
-                        ));
-                        tests.push_str(invariant);
-                        tests.push_str("\n\n");
+                        if proptest {
+                            let sanitized_target = finding.target.replace("::", "_");
+                            let sanitized_rule = finding.rule_id.replace('-', "_").to_lowercase();
+                            tests.push_str(&format!(
+                                "    #[test]\n    fn prop_invariant_{}_{}(\n        attacker in arb_address(),\n        amount in arb_i128(1..=1_000_000),\n    ) {{\n        let env = Env::default();\n        // Invariant for [{}]: {}\n        // {}\n    }}\n\n",
+                                sanitized_rule, sanitized_target, finding.rule_id, finding.title, invariant
+                            ));
+                        } else {
+                            tests.push_str(&format!(
+                                "// [{}] Target: {}\n",
+                                finding.rule_id, finding.target
+                            ));
+                            tests.push_str(invariant);
+                            tests.push_str("\n\n");
+                        }
                     }
                 }
+            }
+
+            if proptest {
+                tests.push_str("}\n");
             }
 
             if count == 0 {
