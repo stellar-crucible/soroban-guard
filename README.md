@@ -16,24 +16,35 @@ Part of the **Stellar Crucible** smart contract engineering triad:
 
 ---
 
-## Architecture Overview
+## Why Soroban Guard?
 
-Soroban Guard evaluates smart contract Rust source files using Abstract Syntax Tree (AST) visitors, identifies anti-patterns and vulnerabilities without compiling to WASM, and synthesizes dynamic regression tests for `soroban-testkit`:
+Smart contracts on Stellar (Soroban) run as compiled WebAssembly (WASM) inside a host-metered environment. While functional unit testing is essential, relying solely on runtime tests and compiled WASM audits leaves critical security vulnerabilities undiscovered:
+
+1. **Opaque WASM Bytecode**: Once Rust contract code is compiled to WebAssembly, rich semantic information—type definitions, variable lifetimes, struct field visibility, and high-level authorization annotations like `require_auth()`—is stripped or obscured. Disassembling WASM cannot reliably reconstruct developer intent.
+2. **Runtime Test Blind Spots**: Unit and property test suites only verify execution paths that test authors deliberately design. Critical vulnerabilities—such as missing caller authentication on administrative functions, unauthenticated contract upgrades, or arithmetic precision loss in token distributions—routinely pass standard tests unnoticed.
+3. **Soroban-Specific Storage Hazards**: Soroban features three distinct storage tiers (**Persistent**, **Instance**, and **Temporary**) with active TTL (Time-To-Live) lifecycles. Storing financial balances in Temporary storage (which can silently vanish without archival restoration) or writing to Persistent storage without TTL renewal will lock or destroy contract state.
+4. **Sub-second Feedback Loop**: Full WASM compilation and test suites take minutes. `soroban-guard` parses raw Rust Abstract Syntax Trees (AST) directly, providing near-instantaneous feedback (sub-second) directly inside developer IDEs and GitHub pull request CI gates before WASM binaries are ever produced.
+
+---
+
+## How It Works
+
+Soroban Guard operates as a multi-stage static analysis and automated verification pipeline:
 
 ```mermaid
 flowchart TD
-    subgraph Input["Input Source Code"]
+    subgraph Input["1. Input Source Code"]
         RS["Contract Source (.rs)"]
     end
 
-    subgraph Parsing["AST Parsing & Extraction"]
+    subgraph Parsing["2. AST Extraction"]
         SYN["syn AST Parser"]
         VIS["ContractVisitor"]
-        FUNC["FunctionAnalyzer\n• Storage Access\n• Auth Checks\n• Loops & Branches\n• External Invocations"]
+        FUNC["FunctionAnalyzer\n• Storage Access (Persistent/Temp)\n• Auth Invocations (require_auth)\n• Loops & Collection Growth\n• Cross-Contract Calls"]
         RS --> SYN --> VIS --> FUNC
     end
 
-    subgraph Rules["Security Rule Engine"]
+    subgraph Rules["3. Security Rule Evaluation"]
         R1["SG-AUTH-001: Missing Auth"]
         R2["SG-STOR-001: Temp Storage Hazard"]
         R3["SG-REENT-001: State Mutation After Call"]
@@ -42,11 +53,11 @@ flowchart TD
         R6["SG-TTL-001: Missing TTL Extension"]
         R7["SG-MINT-001: Unbounded Mint"]
         R8["SG-AUTH-002: Auth Propagation"]
-        R9["SG-DATA-001: Unbounded Growth"]
+        R9["SG-DATA-001: Unbounded Storage Growth"]
         FUNC --> R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9
     end
 
-    subgraph Reporting["Multi-Format Exporters"]
+    subgraph Reporting["4. Multi-Format Exporters"]
         REP["AuditReport"]
         R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 & R9 --> REP
         REP --> MD["GitHub Markdown"]
@@ -54,12 +65,24 @@ flowchart TD
         REP --> HTML["Interactive HTML Report"]
     end
 
-    subgraph Synthesis["Symbiotic Verification"]
+    subgraph Synthesis["5. Symbiotic Invariant Synthesis"]
         SYNTH["synth-testkit Engine"]
         REP --> SYNTH
         SYNTH --> TESTKIT["soroban-testkit Property Invariants\n(crates/soroban-testkit-core)"]
     end
 ```
+
+### Detailed Execution Stages
+
+1. **AST Extraction (`syn`)**: Rust source files are parsed into strongly typed syntax trees via `syn`, identifying contract implementations marked with `#[contractimpl]` and struct configurations marked with `#[contracttype]`.
+2. **Contextual Analysis (`ContractVisitor` & `FunctionAnalyzer`)**: The engine walks through every method body, recording:
+   - State-modifying operations (storage `set`, `remove`, `extend_ttl`).
+   - Authorization assertions (`require_auth`, `require_auth_for_args`).
+   - Cross-contract calls (`invoke_contract`, client calls).
+   - Control flow, branching, loops, and arithmetic operations (checking for division before multiplication).
+3. **Rule Matching & Severity Scoring**: Discovered patterns are checked against specialized security rules (`SG-*`). Findings are assigned standardized severity ratings (**Critical**, **High**, **Warning**, **Info**) with file and line annotations.
+4. **Multi-Format Export**: Findings are serialized into GitHub Markdown, SARIF v2.1.0 for automatic code scanning PR annotations, and standalone responsive HTML reports.
+5. **Symbiotic Invariant Synthesis (`synth-testkit`)**: When a potential vulnerability is identified, `soroban-guard` synthesizes runnable `soroban-testkit` invariant regression tests to prove and guard against the issue in runtime test suites.
 
 ---
 
