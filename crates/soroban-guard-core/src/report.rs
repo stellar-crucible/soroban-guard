@@ -131,8 +131,57 @@ impl AuditReport {
         out
     }
 
-    /// Render SARIF JSON compatible with GitHub Code Scanning.
+    /// Render SARIF v2.1.0 JSON compatible with GitHub Code Scanning.
     pub fn render_sarif(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
+        let results: Vec<serde_json::Value> = self
+            .findings
+            .iter()
+            .map(|f| {
+                let level = match f.level {
+                    FindingLevel::Critical | FindingLevel::High => "error",
+                    FindingLevel::Warning => "warning",
+                    FindingLevel::Info => "note",
+                };
+                serde_json::json!({
+                    "ruleId": f.rule_id,
+                    "level": level,
+                    "message": {
+                        "text": f.description
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uri": self.file
+                                },
+                                "region": {
+                                    "startLine": f.line,
+                                    "startColumn": 1
+                                }
+                            }
+                        }
+                    ]
+                })
+            })
+            .collect();
+
+        let sarif = serde_json::json!({
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "soroban-guard",
+                            "informationUri": "https://github.com/stellar-crucible/soroban-guard",
+                            "semanticVersion": "0.1.0"
+                        }
+                    },
+                    "results": results
+                }
+            ]
+        });
+
+        serde_json::to_string_pretty(&sarif).unwrap_or_default()
     }
 }
