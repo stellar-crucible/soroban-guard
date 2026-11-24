@@ -10,3 +10,5 @@
 - [SG-REENT-001: State Mutation After Call](rules/reentrancy.md)
 - [SG-ARITH-001: Division Precision Loss](rules/arithmetic.md)
 - [SG-UPG-001: Unprotected Contract Upgrade](rules/upgrade.md)
+- [SG-TTL-001: Missing TTL Extension](rules/ttl.md)
+- [SG-MINT-001: Unbounded Minting Routine](rules/mint.md)

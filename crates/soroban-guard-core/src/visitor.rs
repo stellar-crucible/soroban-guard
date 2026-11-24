@@ -13,6 +13,7 @@ pub struct ContractFunction {
     pub auth_checks: Vec<AuthCheck>,
     pub external_calls: Vec<ExternalCall>,
     pub division_calls: Vec<ArithmeticOp>,
+    pub ttl_extensions: Vec<TtlExtension>,
     pub has_upgrade_call: bool,
 }
 
@@ -47,6 +48,11 @@ pub struct ExternalCall {
 #[derive(Debug, Clone)]
 pub struct ArithmeticOp {
     pub op: String,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TtlExtension {
     pub line: usize,
 }
 
@@ -88,6 +94,7 @@ impl<'ast> Visit<'ast> for ContractVisitor {
                     auth_checks: Vec::new(),
                     external_calls: Vec::new(),
                     division_calls: Vec::new(),
+                    ttl_extensions: Vec::new(),
                     has_upgrade_call: false,
                 };
                 fn_analyzer.visit_impl_item_fn(method);
@@ -101,6 +108,7 @@ impl<'ast> Visit<'ast> for ContractVisitor {
                     auth_checks: fn_analyzer.auth_checks,
                     external_calls: fn_analyzer.external_calls,
                     division_calls: fn_analyzer.division_calls,
+                    ttl_extensions: fn_analyzer.ttl_extensions,
                     has_upgrade_call: fn_analyzer.has_upgrade_call,
                 });
             }
@@ -119,6 +127,7 @@ struct FunctionAnalyzer {
     auth_checks: Vec<AuthCheck>,
     external_calls: Vec<ExternalCall>,
     division_calls: Vec<ArithmeticOp>,
+    ttl_extensions: Vec<TtlExtension>,
     has_upgrade_call: bool,
 }
 
@@ -131,6 +140,11 @@ impl<'ast> Visit<'ast> for FunctionAnalyzer {
         if method_name == "require_auth" || method_name == "require_auth_for_args" {
             let target_ident = quote::quote!(#node).to_string();
             self.auth_checks.push(AuthCheck { target_ident, line });
+        }
+
+        // Check TTL extension
+        if method_name == "extend_ttl" || method_name == "extend_ttl_for_code" {
+            self.ttl_extensions.push(TtlExtension { line });
         }
 
         // Check storage operations

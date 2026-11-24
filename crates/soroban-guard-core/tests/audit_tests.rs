@@ -24,6 +24,12 @@ impl VulnerableVault {
         // Unprotected upgrade
         env.deployer().update_current_contract_wasm(new_wasm);
     }
+
+    pub fn mint_tokens(env: Env, to: Address, amount: i128) {
+        // Unrestricted minting without caller auth or supply cap
+        // Also missing extend_ttl
+        env.storage().persistent().set(&to, &amount);
+    }
 }
 "#;
 
@@ -38,6 +44,7 @@ impl SecureVault {
     pub fn deposit(env: Env, caller: Address, amount: i128) {
         caller.require_auth();
         env.storage().persistent().set(&caller, &amount);
+        env.storage().persistent().extend_ttl(&caller, 10_000, 50_000);
     }
 }
 "#;
@@ -67,17 +74,35 @@ fn test_auditor_detects_vulnerabilities() {
     let has_upgrade_finding = report.findings.iter().any(|f| f.rule_id == "SG-UPG-001");
     assert!(has_upgrade_finding, "Unprotected upgrade finding expected");
 
+    // Should detect missing TTL extension (SG-TTL-001)
+    let has_ttl_finding = report.findings.iter().any(|f| f.rule_id == "SG-TTL-001");
+    assert!(has_ttl_finding, "Missing TTL finding expected");
+
+    // Should detect unbounded mint (SG-MINT-001)
+    let has_mint_finding = report.findings.iter().any(|f| f.rule_id == "SG-MINT-001");
+    assert!(has_mint_finding, "Unbounded mint finding expected");
+
     // Verify markdown rendering
     let md = report.render_markdown();
     assert!(md.contains("Security Audit Report"));
     assert!(md.contains("SG-AUTH-001"));
+
+    // Verify SARIF v2.1.0 rendering
+    let sarif = report.render_sarif();
+    assert!(sarif.contains("\"version\": \"2.1.0\""));
+    assert!(sarif.contains("\"ruleId\": \"SG-AUTH-001\""));
 }
 
 #[test]
 fn test_auditor_passes_clean_contract() {
     let auditor = SorobanAuditor::new(AuditConfig {
         min_level: FindingLevel::High,
-        enabled_rules: vec!["SG-AUTH-001".into(), "SG-STOR-001".into()],
+        enabled_rules: vec![
+            "SG-AUTH-001".into(),
+            "SG-STOR-001".into(),
+            "SG-TTL-001".into(),
+            "SG-MINT-001".into(),
+        ],
     });
     let report = auditor
         .audit_source("secure.rs", SECURE_CONTRACT)
