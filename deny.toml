@@ -1,0 +1,65 @@
+# cargo-deny configuration — https://embarkstudios.github.io/cargo-deny/
+# Checks advisories, licenses, duplicate versions and source provenance.
+
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+]
+all-features = true
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+ignore = [
+    # soroban-env-host 28 pins k256 0.13 -> elliptic-curve 0.13 -> crypto-bigint 0.5,
+    # and crypto-bigint 0.5 has no compatible release that carries the fix
+    # (RUSTSEC-2026-0387 lands in 0.7.6). The advisory is about constant-time
+    # arithmetic on secret integers; the host's secp256k1 path recovers a public
+    # key from a signature, and this toolkit only runs in test environments.
+    # Drop this ignore when soroban-env-host moves to crypto-bigint >= 0.7.6.
+    "RUSTSEC-2026-0387",
+]
+
+[licenses]
+version = 2
+private = { ignore = true }
+confidence-threshold = 0.8
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-2-Clause",
+    "BSD-2-Clause-Patent",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "zlib-acknowledgement",
+]
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+multiple-versions = "warn"
+# Path dependencies within the workspace carry no version requirement, which
+# cargo-deny counts as a wildcard; real wildcard requirements stay denied.
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

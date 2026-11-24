@@ -165,7 +165,7 @@ fn main() -> Result<()> {
                                 .bold()
                         );
                         if deny_warnings {
-                            std::process::exit(1);
+                            anyhow::bail!("Security audit failed: {} findings discovered.", total_findings);
                         }
                     }
                 }
