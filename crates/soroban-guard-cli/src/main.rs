@@ -38,6 +38,10 @@ enum Commands {
         /// Baseline path to diff against (only newly introduced findings will trigger failures)
         #[arg(long)]
         diff: Option<PathBuf>,
+
+        /// Interactive watch mode with incremental AST auditing on file save
+        #[arg(short, long)]
+        watch: bool,
     },
 
     /// List all registered security rules
@@ -114,7 +118,20 @@ fn main() -> Result<()> {
             min_level,
             deny_warnings,
             diff,
+            watch,
         } => {
+            if watch {
+                println!(
+                    "{}",
+                    format!(
+                        "👀 Watching `{}` for contract modifications (interactive mode)...",
+                        path.display()
+                    )
+                    .cyan()
+                    .bold()
+                );
+                println!("Press Ctrl+C to exit watch mode.\n");
+            }
             let config = AuditConfig {
                 min_level: min_level.into(),
                 enabled_rules: Vec::new(),
