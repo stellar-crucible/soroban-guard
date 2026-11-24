@@ -165,7 +165,10 @@ fn main() -> Result<()> {
                                 .bold()
                         );
                         if deny_warnings {
-                            anyhow::bail!("Security audit failed: {} findings discovered.", total_findings);
+                            anyhow::bail!(
+                                "Security audit failed: {} findings discovered.",
+                                total_findings
+                            );
                         }
                     }
                 }
