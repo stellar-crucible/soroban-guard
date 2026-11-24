@@ -34,6 +34,10 @@ enum Commands {
         /// Exit with non-zero code if findings are present
         #[arg(long, default_value_t = true)]
         deny_warnings: bool,
+
+        /// Baseline path to diff against (only newly introduced findings will trigger failures)
+        #[arg(long)]
+        diff: Option<PathBuf>,
     },
 
     /// List all registered security rules
@@ -101,6 +105,7 @@ fn main() -> Result<()> {
             format,
             min_level,
             deny_warnings,
+            diff,
         } => {
             let config = AuditConfig {
                 min_level: min_level.into(),
@@ -109,6 +114,16 @@ fn main() -> Result<()> {
             let auditor = SorobanAuditor::new(config);
             let reports = auditor.audit_path(&path)?;
 
+            let baseline_findings: Vec<soroban_guard_core::Finding> = if let Some(base_path) = diff
+            {
+                let base_reports = auditor.audit_path(&base_path)?;
+                base_reports.into_iter().flat_map(|r| r.findings).collect()
+            } else {
+                Vec::new()
+            };
+
+            let is_diff_mode = !baseline_findings.is_empty();
+            let mut new_findings_count = 0;
             let total_findings: usize = reports.iter().map(|r| r.len()).sum();
 
             match format {
@@ -129,6 +144,12 @@ fn main() -> Result<()> {
                 }
                 OutputFormat::Text => {
                     println!("{}", format!("Audited {} file(s)...", reports.len()).bold());
+                    if is_diff_mode {
+                        println!(
+                            "{}",
+                            format!("Running in Diff-Audit Mode against baseline: {} findings found in base.", baseline_findings.len()).cyan().bold()
+                        );
+                    }
                     println!();
 
                     for report in &reports {
@@ -137,6 +158,23 @@ fn main() -> Result<()> {
                         }
                         println!("File: {}", report.file.bold().underline());
                         for f in &report.findings {
+                            let is_pre_existing = baseline_findings
+                                .iter()
+                                .any(|bf| bf.rule_id == f.rule_id && bf.target == f.target);
+                            if !is_pre_existing {
+                                new_findings_count += 1;
+                            }
+
+                            let diff_tag = if is_diff_mode {
+                                if is_pre_existing {
+                                    "[BASELINE] ".dimmed()
+                                } else {
+                                    "[NEW] ".red().bold()
+                                }
+                            } else {
+                                "".normal()
+                            };
+
                             let badge = match f.level {
                                 FindingLevel::Critical => "CRITICAL".red().bold(),
                                 FindingLevel::High => "HIGH".red(),
@@ -144,7 +182,13 @@ fn main() -> Result<()> {
                                 FindingLevel::Info => "INFO".blue(),
                             };
                             println!(
-                                "  [{}] {} (line {} in `{}`)",
+                                "  {}{}[{}] {} (line {} in `{}`)",
+                                diff_tag,
+                                if is_pre_existing {
+                                    "".dimmed()
+                                } else {
+                                    "".normal()
+                                },
                                 badge,
                                 f.title.bold(),
                                 f.line,
@@ -156,7 +200,26 @@ fn main() -> Result<()> {
                         println!();
                     }
 
-                    if total_findings == 0 {
+                    if is_diff_mode {
+                        println!(
+                            "{}",
+                            format!(
+                                "Diff Summary: {} total findings ({} new, {} pre-existing)",
+                                total_findings,
+                                new_findings_count,
+                                total_findings.saturating_sub(new_findings_count)
+                            )
+                            .bold()
+                        );
+                        if new_findings_count > 0 && deny_warnings {
+                            anyhow::bail!(
+                                "Diff audit failed: {} newly introduced security finding(s) detected.",
+                                new_findings_count
+                            );
+                        } else {
+                            println!("{}", "✔ No new security vulnerabilities introduced relative to baseline.".green().bold());
+                        }
+                    } else if total_findings == 0 {
                         println!(
                             "{}",
                             "✔ All audited contracts passed security checks without findings!"
