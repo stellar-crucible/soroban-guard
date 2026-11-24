@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/stellar-crucible/soroban-guard"
 
 [workspace.dependencies]
-syn = { version = "2.0.119", features = ["full", "visit", "extra-traits"] }
+syn = { version = "3.0.10", features = ["full", "visit", "extra-traits"] }
 quote = "1.0.39"
 proc-macro2 = { version = "1.0.94", features = ["span-locations"] }
 serde = { version = "1.0.219", features = ["derive"] }
