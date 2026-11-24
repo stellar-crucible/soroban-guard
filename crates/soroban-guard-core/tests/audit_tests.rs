@@ -138,3 +138,23 @@ fn test_auditor_passes_clean_contract() {
 
     assert!(report.is_empty(), "Secure contract should have 0 findings");
 }
+
+#[test]
+fn test_audit_report_diff() {
+    let auditor = SorobanAuditor::default();
+    let vuln_report = auditor
+        .audit_source("vuln.rs", VULNERABLE_CONTRACT)
+        .expect("audit should succeed");
+    let clean_report = auditor
+        .audit_source("secure.rs", SECURE_CONTRACT)
+        .expect("audit should succeed");
+
+    // Comparing vuln against clean baseline should detect new findings
+    let diff = vuln_report.diff_against(&clean_report);
+    assert!(!diff.is_empty());
+    assert_eq!(diff.len(), vuln_report.len());
+
+    // Comparing vuln against itself should detect 0 new findings
+    let self_diff = vuln_report.diff_against(&vuln_report);
+    assert!(self_diff.is_empty());
+}

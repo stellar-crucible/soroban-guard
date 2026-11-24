@@ -87,6 +87,20 @@ impl AuditReport {
         self.findings.len()
     }
 
+    /// Return findings present in this report that were not in the baseline report.
+    pub fn diff_against(&self, baseline: &AuditReport) -> Vec<Finding> {
+        self.findings
+            .iter()
+            .filter(|f| {
+                !baseline
+                    .findings
+                    .iter()
+                    .any(|bf| bf.rule_id == f.rule_id && bf.target == f.target)
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Render report as GitHub-flavored Markdown.
     pub fn render_markdown(&self) -> String {
         let mut out = String::new();

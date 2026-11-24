@@ -2,6 +2,7 @@
 
 [Introduction](index.md)
 [Getting Started](getting-started.md)
+[End-to-End Triad Tutorial](triad-tutorial.md)
 [Integration with soroban-testkit](integration-with-testkit.md)
 
 # Security Rules
