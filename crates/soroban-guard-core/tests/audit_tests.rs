@@ -30,6 +30,18 @@ impl VulnerableVault {
         // Also missing extend_ttl
         env.storage().persistent().set(&to, &amount);
     }
+
+    pub fn batch_insert(env: Env, count: u32) {
+        // Iterative storage writes inside loop (SG-DATA-001)
+        for i in 0..count {
+            env.storage().persistent().set(&i, &i);
+        }
+    }
+
+    pub fn forward_transfer(env: Env, client: TokenClient, to: Address, amount: i128) {
+        // Missing sub-invocation auth propagation (SG-AUTH-002)
+        client.transfer(&to, &amount);
+    }
 }
 "#;
 
@@ -82,6 +94,14 @@ fn test_auditor_detects_vulnerabilities() {
     let has_mint_finding = report.findings.iter().any(|f| f.rule_id == "SG-MINT-001");
     assert!(has_mint_finding, "Unbounded mint finding expected");
 
+    // Should detect unbounded collection growth in loop (SG-DATA-001)
+    let has_data_finding = report.findings.iter().any(|f| f.rule_id == "SG-DATA-001");
+    assert!(has_data_finding, "Unbounded data finding expected");
+
+    // Should detect missing cross-contract auth propagation (SG-AUTH-002)
+    let has_auth_prop = report.findings.iter().any(|f| f.rule_id == "SG-AUTH-002");
+    assert!(has_auth_prop, "Auth propagation finding expected");
+
     // Verify markdown rendering
     let md = report.render_markdown();
     assert!(md.contains("Security Audit Report"));
@@ -91,6 +111,12 @@ fn test_auditor_detects_vulnerabilities() {
     let sarif = report.render_sarif();
     assert!(sarif.contains("\"version\": \"2.1.0\""));
     assert!(sarif.contains("\"ruleId\": \"SG-AUTH-001\""));
+
+    // Verify HTML rendering
+    let html = report.render_html();
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("Soroban Guard Security Report"));
+    assert!(html.contains("SG-DATA-001"));
 }
 
 #[test]
@@ -102,6 +128,8 @@ fn test_auditor_passes_clean_contract() {
             "SG-STOR-001".into(),
             "SG-TTL-001".into(),
             "SG-MINT-001".into(),
+            "SG-AUTH-002".into(),
+            "SG-DATA-001".into(),
         ],
     });
     let report = auditor

@@ -1,6 +1,6 @@
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{ExprMethodCall, ItemImpl, ItemStruct};
+use syn::{ExprForLoop, ExprLoop, ExprMethodCall, ExprWhile, ItemImpl, ItemStruct};
 
 /// A function defined within a Soroban contract implementation.
 #[derive(Debug, Clone)]
@@ -14,6 +14,8 @@ pub struct ContractFunction {
     pub external_calls: Vec<ExternalCall>,
     pub division_calls: Vec<ArithmeticOp>,
     pub ttl_extensions: Vec<TtlExtension>,
+    pub writes_in_loop: Vec<StorageAccess>,
+    pub has_auth_propagation: bool,
     pub has_upgrade_call: bool,
 }
 
@@ -95,6 +97,9 @@ impl<'ast> Visit<'ast> for ContractVisitor {
                     external_calls: Vec::new(),
                     division_calls: Vec::new(),
                     ttl_extensions: Vec::new(),
+                    writes_in_loop: Vec::new(),
+                    in_loop_depth: 0,
+                    has_auth_propagation: false,
                     has_upgrade_call: false,
                 };
                 fn_analyzer.visit_impl_item_fn(method);
@@ -109,6 +114,8 @@ impl<'ast> Visit<'ast> for ContractVisitor {
                     external_calls: fn_analyzer.external_calls,
                     division_calls: fn_analyzer.division_calls,
                     ttl_extensions: fn_analyzer.ttl_extensions,
+                    writes_in_loop: fn_analyzer.writes_in_loop,
+                    has_auth_propagation: fn_analyzer.has_auth_propagation,
                     has_upgrade_call: fn_analyzer.has_upgrade_call,
                 });
             }
@@ -128,10 +135,31 @@ struct FunctionAnalyzer {
     external_calls: Vec<ExternalCall>,
     division_calls: Vec<ArithmeticOp>,
     ttl_extensions: Vec<TtlExtension>,
+    writes_in_loop: Vec<StorageAccess>,
+    in_loop_depth: usize,
+    has_auth_propagation: bool,
     has_upgrade_call: bool,
 }
 
 impl<'ast> Visit<'ast> for FunctionAnalyzer {
+    fn visit_expr_for_loop(&mut self, node: &'ast ExprForLoop) {
+        self.in_loop_depth += 1;
+        visit::visit_expr_for_loop(self, node);
+        self.in_loop_depth -= 1;
+    }
+
+    fn visit_expr_while(&mut self, node: &'ast ExprWhile) {
+        self.in_loop_depth += 1;
+        visit::visit_expr_while(self, node);
+        self.in_loop_depth -= 1;
+    }
+
+    fn visit_expr_loop(&mut self, node: &'ast ExprLoop) {
+        self.in_loop_depth += 1;
+        visit::visit_expr_loop(self, node);
+        self.in_loop_depth -= 1;
+    }
+
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         let method_name = node.method.to_string();
         let line = node.method.span().start().line;
@@ -142,9 +170,24 @@ impl<'ast> Visit<'ast> for FunctionAnalyzer {
             self.auth_checks.push(AuthCheck { target_ident, line });
         }
 
+        // Check auth propagation
+        if method_name == "authorize_as_current_contract" {
+            self.has_auth_propagation = true;
+        }
+
         // Check TTL extension
         if method_name == "extend_ttl" || method_name == "extend_ttl_for_code" {
             self.ttl_extensions.push(TtlExtension { line });
+        }
+
+        // Check cross-contract client invocations
+        let receiver_str = quote::quote!(#node.receiver).to_string();
+        if receiver_str.contains("client") || receiver_str.contains("Client") {
+            self.external_calls.push(ExternalCall {
+                callee: receiver_str,
+                method: method_name.clone(),
+                line,
+            });
         }
 
         // Check storage operations
@@ -159,11 +202,18 @@ impl<'ast> Visit<'ast> for FunctionAnalyzer {
             } else {
                 StorageTier::Unknown
             };
-            self.storage_writes.push(StorageAccess {
+
+            let access = StorageAccess {
                 tier,
                 method: method_name.clone(),
                 line,
-            });
+            };
+
+            self.storage_writes.push(access.clone());
+
+            if self.in_loop_depth > 0 {
+                self.writes_in_loop.push(access);
+            }
         } else if method_name == "get" || method_name == "has" {
             let expr_str = quote::quote!(#node).to_string();
             let tier = if expr_str.contains("temporary") {
